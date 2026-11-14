@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1") as Integer
+
+android {
+    namespace 'pt.jfcarvalho.thopobupi'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "pt.jfcarvalho.thopobupi"
+        minSdk 26
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0." + buildNumber
+    }
+
+    signingConfigs {
+        thopo {
+            storeFile file("thopobupi.jks")
+            storePassword "thopobupi"
+            keyAlias "thopobupi"
+            keyPassword "thopobupi"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.thopo
+        }
+        debug {
+            signingConfig signingConfigs.thopo
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'org.osmdroid:osmdroid-android:6.1.20'
+}
