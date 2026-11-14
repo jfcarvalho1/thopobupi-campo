@@ -46,6 +46,7 @@ public class GnssLink {
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean running;
+    private volatile int gen;
     private volatile BluetoothSocket bt;
     private volatile OutputStream btOut;
     private volatile Socket ntrip;
@@ -76,11 +77,13 @@ public class GnssLink {
     public void connect(final BluetoothDevice dev, final NtripConfig cfg) {
         if (running) return;
         running = true;
-        new Thread(() -> runBluetooth(dev, cfg), "bt").start();
+        final int my = ++gen;
+        new Thread(() -> runBluetooth(dev, cfg, my), "bt").start();
     }
 
     public void disconnect() {
         running = false;
+        gen++;
         closeQuiet(ntrip);
         closeQuiet(bt);
         btConnected = false;
@@ -122,8 +125,8 @@ public class GnssLink {
     }
 
     @SuppressLint("MissingPermission")
-    private void runBluetooth(BluetoothDevice dev, NtripConfig cfg) {
-        while (running) {
+    private void runBluetooth(BluetoothDevice dev, NtripConfig cfg, int my) {
+        while (running && gen == my) {
             btStatus = "A ligar ao receptor…";
             status();
             try {
@@ -132,27 +135,29 @@ public class GnssLink {
                 btConnected = true;
                 btStatus = "Receptor ligado";
                 status();
-                if (cfg != null && cfg.enabled) startNtrip(cfg);
-                readLoop(bt.getInputStream());
+                if (cfg != null && cfg.enabled) startNtrip(cfg, my);
+                readLoop(bt.getInputStream(), my);
             } catch (IOException | SecurityException e) {
                 btStatus = "Falha Bluetooth: " + e.getMessage();
             }
             btConnected = false;
             closeQuiet(bt);
             closeQuiet(ntrip);
-            if (!running) break;
+            if (!running || gen != my) return;
             btStatus = "Ligação perdida, a repetir…";
             status();
             sleep(3000);
         }
-        btConnected = false;
-        status();
+        if (gen == my) {
+            btConnected = false;
+            status();
+        }
     }
 
-    private void readLoop(InputStream in) throws IOException {
+    private void readLoop(InputStream in, int my) throws IOException {
         byte[] buf = new byte[2048];
         StringBuilder line = new StringBuilder();
-        while (running) {
+        while (running && gen == my) {
             int n = in.read(buf);
             if (n < 0) throw new IOException("fim de dados");
             for (int i = 0; i < n; i++) {
@@ -175,9 +180,9 @@ public class GnssLink {
         }
     }
 
-    private void startNtrip(final NtripConfig cfg) {
+    private void startNtrip(final NtripConfig cfg, final int my) {
         new Thread(() -> {
-            while (running && btConnected) {
+            while (running && btConnected && gen == my) {
                 try {
                     runNtrip(cfg);
                 } catch (Exception e) {
@@ -185,7 +190,7 @@ public class GnssLink {
                     status();
                 }
                 closeQuiet(ntrip);
-                if (!running || !btConnected) break;
+                if (!running || !btConnected || gen != my) break;
                 sleep(5000);
             }
         }, "ntrip").start();
