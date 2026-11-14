@@ -209,7 +209,7 @@
         android:paddingStart="12dp"
         android:paddingTop="4dp"
         android:paddingBottom="4dp"
-        android:text="E — · N — · Z —"
+        android:text="TM06  E — · N — · Z —"
         android:textColor="@color/texto"
         android:textSize="14sp" />
 

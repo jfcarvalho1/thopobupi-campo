@@ -61,7 +61,7 @@ public class MainActivity extends Activity implements GnssLink.Listener {
 
     private static final int REQ_PERM = 11;
     private static final int REQ_BT_ON = 12;
-    private static final int[] PORTS = {2101, 2106, 2102};
+    private static final int[] PORTS = {2101, 2106, 2108};
     private static final String DEFAULT_CODES = "Z-MR,Z-EDIF,ct,MRB,L,OBRA,LIMITES,POLILINHA2D,MARCO_LIM,ESTEIO";
     private static final String DEFAULT_LINE_CODES = "L,LIM,LIMITES,POLILINHA2D,MURO,Z-MR,Z-EDIF";
 
@@ -314,11 +314,13 @@ public class MainActivity extends Activity implements GnssLink.Listener {
     }
 
     private int currentPort() {
-        return prefs.getInt("port", 2106);
+        int p = prefs.getInt("port", 2106);
+        for (int x : PORTS) if (x == p) return p;
+        return 2106;
     }
 
     private String mountFor(int port) {
-        String def = port == 2106 ? "NSR5" : port == 2102 ? "BRAG" : "";
+        String def = port == 2106 ? "NSR5" : port == 2108 ? "ACR5" : "";
         return prefs.getString("mount_" + port, def);
     }
 
@@ -392,7 +394,7 @@ public class MainActivity extends Activity implements GnssLink.Listener {
         rg.check(currentPort());
         l.addView(rg);
         TextView ph = new TextView(this);
-        ph.setText("2101 estação manual (Braga) · 2106 a habitual · 2102 pontual");
+        ph.setText("2101 estação manual (Braga) · 2106 a habitual · 2108");
         ph.setTextSize(12);
         l.addView(ph);
 
@@ -439,6 +441,12 @@ public class MainActivity extends Activity implements GnssLink.Listener {
             });
         });
         l.addView(bList);
+
+        TextView crs = new TextView(this);
+        crs.setText("Sistema de coordenadas (fixo): ETRS89 / PT-TM06 · EPSG:3763");
+        crs.setTextSize(13);
+        crs.setPadding(0, dp(16), 0, 0);
+        l.addView(crs);
 
         TextView h2 = new TextView(this);
         h2.setText("Levantamento");
@@ -752,9 +760,11 @@ public class MainActivity extends Activity implements GnssLink.Listener {
             return;
         }
         GnssLink.NtripConfig cfg = ntripConfig();
-        if (cfg.enabled && (cfg.user.isEmpty() || cfg.mount.isEmpty())) {
-            toast("NTRIP sem utilizador ou mountpoint: liga só o receptor. Preenche em Configurar.");
-            cfg.enabled = false;
+        if (cfg.enabled && (cfg.user.isEmpty() || cfg.pass.isEmpty() || cfg.mount.isEmpty())) {
+            info("ReNEP por configurar", "Falta o utilizador, a password ou o mountpoint da porta " + cfg.port
+                    + ".\n\nPreenche em Configurar (só é preciso uma vez; fica guardado nesta caderneta) e carrega outra vez em Ligar.");
+            settingsDialog();
+            return;
         }
         rtcmBytes = 0;
         link.connect(dev, cfg);
@@ -891,14 +901,14 @@ public class MainActivity extends Activity implements GnssLink.Listener {
             tvState.setTextColor(red);
             tvAge.setText("Idade RTK: —");
             tvAge.setTextColor(red);
-            tvEnz.setText("E — · N — · Z —");
+            tvEnz.setText("TM06  E — · N — · Z —");
         } else if (!link.isConnected()) {
             tvState.setText("A ligar ao receptor…");
             tvState.setTextColor(amber);
         } else if (!fresh()) {
             tvState.setText("Sem dados NMEA do receptor");
             tvState.setTextColor(red);
-            tvEnz.setText("E — · N — · Z —");
+            tvEnz.setText("TM06  E — · N — · Z —");
         } else {
             tvState.setText(gnss.summary());
             tvState.setTextColor(gnss.quality == 4 ? green : gnss.quality == 5 ? amber : red);
@@ -913,7 +923,7 @@ public class MainActivity extends Activity implements GnssLink.Listener {
             if (gnss.hasPosition()) {
                 double[] en = Tm06.fromLatLon(gnss.lat, gnss.lon);
                 double z = gnss.alt - pole;
-                tvEnz.setText(String.format(Locale.US, "E %.3f · N %.3f · Z %s", en[0], en[1],
+                tvEnz.setText(String.format(Locale.US, "TM06  E %.3f · N %.3f · Z %s", en[0], en[1],
                         Double.isNaN(z) ? "—" : String.format(Locale.US, "%.3f", z)));
                 if (stakeTarget != null) {
                     double de = stakeTarget.e - en[0], dn = stakeTarget.n - en[1];
@@ -922,7 +932,7 @@ public class MainActivity extends Activity implements GnssLink.Listener {
                             stakeTarget.name, dist, de, dn));
                 }
             } else {
-                tvEnz.setText("E — · N — · Z —");
+                tvEnz.setText("TM06  E — · N — · Z —");
             }
         }
         tvBat.setText("Bat. — · " + (saved ? "Guardado ✓" : "Por guardar"));
@@ -1010,7 +1020,11 @@ public class MainActivity extends Activity implements GnssLink.Listener {
         StringBuilder msg = new StringBuilder();
         boolean ok = p.quality == 4 && !Double.isNaN(total) && total <= tol;
         msg.append(String.format(Locale.US, "Ponto %s · %s%n", p.name, p.desc.isEmpty() ? "(sem descrição)" : p.desc));
-        msg.append(String.format(Locale.US, "E %.3f  N %.3f  Z %.3f%n%n", p.e, p.n, p.z));
+        msg.append(String.format(Locale.US, "ETRS89 / PT-TM06 (EPSG:3763)%nE %.3f  N %.3f  Z %.3f%n%n", p.e, p.n, p.z));
+        if (p.quality != 4 && p.quality != 5) {
+            msg.append("⚠ Sem correcções ReNEP: a posição não está em ETRS89 rigoroso (erro métrico).\n");
+            p.obs = (p.obs.isEmpty() ? "" : p.obs + "; ") + "SEM RENEP";
+        }
         msg.append("Solução: ").append(GnssState.qualityName(p.quality)).append('\n');
         if (Double.isNaN(total)) {
             msg.append("Erro total: desconhecido (o receptor não envia GST)\n");
@@ -1221,10 +1235,10 @@ public class MainActivity extends Activity implements GnssLink.Listener {
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(new Date());
         StringBuilder done = new StringBuilder();
         try {
-            if (txt) done.append(writeExport(safeJob() + "_" + stamp + ".txt", "text/plain", Exporters.txt(pts))).append('\n');
-            if (dxf) done.append(writeExport(safeJob() + "_" + stamp + ".dxf", "application/octet-stream",
+            if (txt) done.append(writeExport(safeJob() + "_" + stamp + "_EPSG3763.txt", "text/plain", Exporters.txt(pts))).append('\n');
+            if (dxf) done.append(writeExport(safeJob() + "_" + stamp + "_EPSG3763.dxf", "application/octet-stream",
                     Exporters.dxf(pts, lines))).append('\n');
-            info("Exportado", "Ficheiros gravados em:\n" + done);
+            info("Exportado", "Coordenadas ETRS89 / PT-TM06 (EPSG:3763).\nFicheiros gravados em:\n" + done);
         } catch (Exception e) {
             info("Erro a exportar", String.valueOf(e.getMessage()));
         }

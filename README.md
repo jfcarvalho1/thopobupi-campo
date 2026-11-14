@@ -10,7 +10,7 @@ Gratuita e de código aberto.
 3. As versões novas instalam-se por cima e mantêm os pontos.
 
 ## O que faz
-- **Ligar**: activa o Bluetooth, liga ao G970II (perfil série) e à ReNEP por NTRIP (portas 2101, 2106 e 2102 à escolha).
+- **Ligar**: activa o Bluetooth, liga ao G970II (perfil série) e à ReNEP por NTRIP (portas 2101, 2106 e 2108 à escolha).
 - Estado FIX / FLOAT / autónomo, satélites, precisão (GST) e idade RTK.
 - **E · N · Z em ETRS89 / PT-TM06 (EPSG:3763)**; Z = cota da antena − altura do bastão.
 - Mapa com o **OrtoSat 2023 da DGT** e as **RGG públicas do BUPi** (só para ver, sem edição), com cópia local para usar sem rede.
